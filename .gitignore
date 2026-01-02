@@ -1,2 +1,5 @@
-ffmpeg.exe
-yt-dlp.exe
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
