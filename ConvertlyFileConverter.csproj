@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <AssemblyName>ConvertlyFileConverter</AssemblyName>
+    <RootNamespace>ConvertlyFileConverter</RootNamespace>
+
+    <ApplicationTitle>Convertly File Converter</ApplicationTitle>
+    <Product>Convertly File Converter</Product>
+    <AssemblyTitle>Convertly File Converter</AssemblyTitle>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="config.json" />
+    <EmbeddedResource Include="ffmpeg.exe" />
+    <EmbeddedResource Include="yt-dlp.exe" />
+  </ItemGroup>
+
+</Project>

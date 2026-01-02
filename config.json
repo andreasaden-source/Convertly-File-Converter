@@ -1,0 +1,4 @@
+{
+  "ffmpegPath": "ffmpeg.exe",
+  "ytDlpPath": "yt-dlp.exe"
+}
