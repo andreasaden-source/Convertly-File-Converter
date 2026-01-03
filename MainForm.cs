@@ -1,18 +1,25 @@
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
+using System.Drawing;
+using System.Security.Cryptography;
 
 public class MainForm : Form {
     private TextBox inputBox;
     private TextBox customArgsBox;
     private ComboBox localOutputFormat;
     private ComboBox youtubeFormat;
+    private Button browseButton;
     private Button convertLocalButton;
     private Button downloadYoutubeButton;
+    private Label statusLabel;
+    private ProgressBar downloadProgressBar;
 
     private string ffmpegPath = "";
     private string ytDlpPath = "";
     private string downloadsFolder = "";
+
+    private static readonly Color AccentColor = Color.FromArgb(0, 120, 215);
 
     public MainForm() {
         LoadConfig();
@@ -20,74 +27,248 @@ public class MainForm : Form {
         downloadsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
 
         this.Text = "Convertly File Converter";
-        this.Width = 800;
-        this.Height = 400;
+        this.Width = 840;
+        this.Height = 580;
         this.FormBorderStyle = FormBorderStyle.FixedSingle;
         this.MaximizeBox = false;
+        this.BackColor = BackColor;
+        this.ForeColor = ForeColor;
 
-        Label inputLabel = new Label() { Text = "Input file path or YouTube URL (drag & drop supported):", Top = 20, Left = 20, Width = 500 };
-        inputBox = new TextBox() { Top = 50, Left = 20, Width = 740 };
+        TableLayoutPanel mainLayout = new TableLayoutPanel() {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(15),
+            ColumnCount = 1,
+            RowCount = 7,
+            BackColor = SystemColors.Window
+        };
+
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        mainLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+
+        Label inputLabel = new Label() {
+            Text = "Input file path or YouTube URL (drag & drop supported):",
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold),
+            ForeColor = AccentColor
+        };
+
+        mainLayout.Controls.Add(inputLabel, 0, 0);
+
+        TableLayoutPanel inputRow = new TableLayoutPanel() {
+            ColumnCount = 2,
+            RowCount = 1,
+            Dock = DockStyle.Fill
+        };
+
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        inputRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+
+        inputBox = new TextBox() {
+            Dock = DockStyle.Fill,
+            Font = new Font("Segoe UI", 10),
+            BackColor = Color.White,
+            BorderStyle = BorderStyle.FixedSingle,
+            Multiline = true,
+        };
+
         inputBox.AllowDrop = true;
         inputBox.DragEnter += (s, e) => {
-            if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
-                e.Effect = DragDropEffects.Copy;
+            if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy;
         };
+
         inputBox.DragDrop += (s, e) => {
             if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop)) {
                 string[]? files = e.Data.GetData(DataFormats.FileDrop) as string[];
-                if (files != null && files.Length > 0)
-                    inputBox.Text = files[0];
+                if (files != null && files.Length > 0) inputBox.Text = files[0];
             }
         };
 
-        Label localLabel = new Label() { Text = "Local File Conversion (FFmpeg)", Top = 100, Left = 20, Font = new Font("Arial", 10, FontStyle.Bold) };
+        browseButton = new Button() {
+            Text = "Browse...",
+            Width = 90,
+            Height = 30,
+            BackColor = AccentColor,
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
 
-        Label outputFormatLabel = new Label() { Text = "Output format:", Top = 130, Left = 40, Width = 100 };
-        localOutputFormat = new ComboBox() { Top = 128, Left = 150, Width = 120 };
+
+        browseButton.FlatAppearance.BorderColor = AccentColor;
+        browseButton.Click += (s, e) => {
+            using OpenFileDialog ofd = new OpenFileDialog() {
+                Title = "Select a media file",
+                Filter = "Media Files|*.mp4;*.mkv;*.webm;*.avi;*.mov;*.flv;*.mp3;*.wav;*.flac;*.aac;*.ogg;*.m4a|All Files|*.*"
+            };
+
+            if (ofd.ShowDialog() == DialogResult.OK) inputBox.Text = ofd.FileName;
+        };
+
+        inputRow.Controls.Add(inputBox, 0, 0);
+        inputRow.Controls.Add(browseButton, 1, 0);
+        mainLayout.Controls.Add(inputRow, 0, 1);
+
+        GroupBox localGroup = new GroupBox() {
+            Text = "Local File Conversion",
+            Dock = DockStyle.Fill,
+            ForeColor = AccentColor,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold)
+        };
+
+        TableLayoutPanel localPanel = new TableLayoutPanel() {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(10)
+        };
+
+        localPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+        localPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        localPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        Label outputLabel = new Label() {
+            Text = "Output format:",
+            AutoSize = true,
+            Anchor = AnchorStyles.Right
+        };
+
+        localOutputFormat = new ComboBox() {
+            Width = 120,
+            Font = new Font("Segoe UI", 16F)
+        };
+
         localOutputFormat.Items.AddRange(new string[] { "mp3", "wav", "flac", "aac", "ogg", "m4a", "opus" });
         localOutputFormat.SelectedIndex = 0;
+        convertLocalButton = new Button() {
+            Text = "Convert Local File",
+            Width = 180,
+            Height = 40,
+            BackColor = AccentColor,
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
 
-        convertLocalButton = new Button() { Text = "Convert Local File", Top = 125, Left = 540, Width = 200 };
-        convertLocalButton.Click += (s, e) => ConvertLocalFile();
+        convertLocalButton.FlatAppearance.BorderColor = AccentColor;
+        convertLocalButton.Click += async (s, e) => await ConvertLocalFileAsync();
+        localPanel.Controls.Add(outputLabel, 0, 0);
+        localPanel.Controls.Add(localOutputFormat, 1, 0);
+        localPanel.Controls.Add(convertLocalButton, 2, 0);
+        localGroup.Controls.Add(localPanel);
+        mainLayout.Controls.Add(localGroup, 0, 2);
 
-        Label youtubeLabel = new Label() { Text = "YouTube / Video Download (yt-dlp)", Top = 180, Left = 20, Font = new Font("Arial", 10, FontStyle.Bold) };
+        GroupBox youtubeGroup = new GroupBox() {
+            Text = "YouTube Video Downloader",
+            Dock = DockStyle.Fill,
+            ForeColor = AccentColor,
+            Font = new Font("Segoe UI", 10, FontStyle.Bold)
+        };
 
-        Label youtubeFormatLabel = new Label() { Text = "Download as:", Top = 210, Left = 40, Width = 100 };
-        youtubeFormat = new ComboBox() { Top = 208, Left = 150, Width = 300 };
+        TableLayoutPanel youtubePanel = new TableLayoutPanel() { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Padding = new Padding(10) };
+
+        youtubePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 140));
+        youtubePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        youtubePanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 300));
+
+        Label youtubeFormatLabel = new Label() {
+            Text = "Download as:",
+            AutoSize = true,
+            Anchor = AnchorStyles.Right
+        };
+
+        youtubeFormat = new ComboBox() {
+            Width = 280,
+            Font = new Font("Segoe UI", 16F)
+        };
+
         youtubeFormat.Items.AddRange(new object[] {
-            "Best quality video + audio (MP4)",
-            "Best video only (MP4)",
-            "Best audio only (MP3)",
+            "Best video & audio (MP4)",
+            "Best video (MP4)",
+            "Best audio (MP3)",
             "Highest resolution (MP4)",
             "720p (MP4)",
             "480p (MP4)",
             "360p (MP4)",
             "WEBM best",
-            "MKV best",
+            "MKV best (true best quality)",
             "Audio only (M4A)",
             "Audio only (WAV)",
             "Audio only (OPUS)"
         });
-        youtubeFormat.SelectedIndex = 2;
 
-        downloadYoutubeButton = new Button() { Text = "Download from YouTube", Top = 205, Left = 470, Width = 290 };
-        downloadYoutubeButton.Click += (s, e) => DownloadFromYoutube();
+        youtubeFormat.SelectedIndex = 0;
+        downloadYoutubeButton = new Button() {
+            Text = "Download from YouTube",
+            Width = 260,
+            Height = 40,
+            BackColor = AccentColor,
+            ForeColor = Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
 
-        Label argsLabel = new Label() { Text = "Custom arguments (optional):", Top = 260, Left = 20, Width = 300 };
-        customArgsBox = new TextBox() { Top = 290, Left = 20, Width = 740 };
+        downloadYoutubeButton.FlatAppearance.BorderColor = AccentColor;
+        downloadYoutubeButton.Click += async (s, e) => await DownloadFromYoutubeAsync();
+        youtubePanel.Controls.Add(youtubeFormatLabel, 0, 0);
+        youtubePanel.Controls.Add(youtubeFormat, 1, 0);
+        youtubePanel.Controls.Add(downloadYoutubeButton, 2, 0);
+        youtubeGroup.Controls.Add(youtubePanel);
+        mainLayout.Controls.Add(youtubeGroup, 0, 3);
 
-        this.Controls.Add(inputLabel);
-        this.Controls.Add(inputBox);
-        this.Controls.Add(localLabel);
-        this.Controls.Add(outputFormatLabel);
-        this.Controls.Add(localOutputFormat);
-        this.Controls.Add(convertLocalButton);
-        this.Controls.Add(youtubeLabel);
-        this.Controls.Add(youtubeFormatLabel);
-        this.Controls.Add(youtubeFormat);
-        this.Controls.Add(downloadYoutubeButton);
-        this.Controls.Add(argsLabel);
-        this.Controls.Add(customArgsBox);
+        Label argsLabel = new Label() {
+            Text = "Custom arguments (optional - advanced users):",
+            AutoSize = true,
+            ForeColor = AccentColor,
+            Font = new Font("Segoe UI", 9, FontStyle.Italic)
+        };
+
+        customArgsBox = new TextBox() {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            Height = 80,
+            ScrollBars = ScrollBars.Vertical,
+            BackColor = Color.White
+        };
+
+        mainLayout.Controls.Add(argsLabel, 0, 4);
+        mainLayout.Controls.Add(customArgsBox, 0, 5);
+
+        TableLayoutPanel statusPanel = new TableLayoutPanel {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(0, 10, 0, 0)
+        };
+
+        statusPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        statusPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+
+        statusLabel = new Label {
+            Text = "Ready",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = AccentColor,
+            Font = new Font("Segoe UI", 11, FontStyle.Bold)
+        };
+
+        downloadProgressBar = new ProgressBar {
+            Dock = DockStyle.Fill,
+            Style = ProgressBarStyle.Continuous,
+            Minimum = 0,
+            Maximum = 100,
+            Value = 0,
+            ForeColor = AccentColor
+        };
+
+        statusPanel.Controls.Add(statusLabel, 0, 0);
+        statusPanel.Controls.Add(downloadProgressBar, 0, 1);
+
+        mainLayout.Controls.Add(statusPanel, 0, 6);
+
+        this.Controls.Add(mainLayout);
     }
 
     private void LoadConfig() {
@@ -107,8 +288,7 @@ public class MainForm : Form {
                 MessageBox.Show("Failed to extract required tools.", "Error");
                 Environment.Exit(1);
             }
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             MessageBox.Show("Error during startup: " + ex.Message, "Error");
             Environment.Exit(1);
         }
@@ -119,8 +299,7 @@ public class MainForm : Form {
         string fullName = $"ConvertlyFileConverter.{resourceName}";
 
         using var stream = assembly.GetManifestResourceStream(fullName);
-        if (stream == null)
-            throw new FileNotFoundException($"Embedded resource '{resourceName}' not found.");
+        if (stream == null) throw new FileNotFoundException($"Embedded resource '{resourceName}' not found.");
 
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();
@@ -134,12 +313,10 @@ public class MainForm : Form {
         Directory.CreateDirectory(tempDir);
         string outputPath = Path.Combine(tempDir, resourceName);
 
-        if (File.Exists(outputPath))
-            return outputPath;
+        if (File.Exists(outputPath)) return outputPath;
 
         using var resourceStream = assembly.GetManifestResourceStream(fullName);
-        if (resourceStream == null)
-            throw new FileNotFoundException($"Embedded resource '{resourceName}' not found.");
+        if (resourceStream == null) throw new FileNotFoundException($"Embedded resource '{resourceName}' not found.");
 
         using var fileStream = File.Create(outputPath);
         resourceStream.CopyTo(fileStream);
@@ -147,10 +324,27 @@ public class MainForm : Form {
         return outputPath;
     }
 
-    private void ConvertLocalFile() {
+    private string GetUniqueOutputPath(string desiredPath) {
+        if (!File.Exists(desiredPath)) return desiredPath;
+
+        string directory = Path.GetDirectoryName(desiredPath)!;
+        string fileName = Path.GetFileNameWithoutExtension(desiredPath)!;
+        string extension = Path.GetExtension(desiredPath);
+
+        int counter = 1;
+        string newPath;
+        do {
+            newPath = Path.Combine(directory, $"{fileName} ({counter}){extension}");
+            counter++;
+        } while (File.Exists(newPath));
+
+        return newPath;
+    }
+
+    private async Task ConvertLocalFileAsync() {
         string input = inputBox.Text.Trim();
         if (string.IsNullOrEmpty(input) || !File.Exists(input)) {
-            MessageBox.Show("Please enter or drop a valid local file.");
+            MessageBox.Show("Please select a valid local file.");
             return;
         }
 
@@ -159,14 +353,31 @@ public class MainForm : Form {
             MessageBox.Show("Please select an output format.");
             return;
         }
+
         string outputExt = selectedOutputObj.ToString() ?? "mp3";
-        string output = Path.ChangeExtension(input, outputExt);
+
+        string directory = Path.GetDirectoryName(input)!;
+        string fileName = Path.GetFileNameWithoutExtension(input)!;
+
+        string baseOutput = Path.Combine(directory, fileName + "." + outputExt);
+        string output = GetUniqueOutputPath(baseOutput);
 
         string args = $"-i \"{input}\" {customArgsBox.Text.Trim()} \"{output}\"";
-        RunCommand(ffmpegPath, args);
+
+        statusLabel.Text = "Converting...";
+        downloadProgressBar.Value = 0;
+        this.Cursor = Cursors.WaitCursor;
+        convertLocalButton.Enabled = false;
+
+        await Task.Run(() => RunCommand(ffmpegPath, args, false));
+
+        convertLocalButton.Enabled = true;
+        statusLabel.Text = "Ready";
+        downloadProgressBar.Value = 0;
+        this.Cursor = Cursors.Default;
     }
 
-    private void DownloadFromYoutube() {
+    private async Task DownloadFromYoutubeAsync() {
         string url = inputBox.Text.Trim();
         if (string.IsNullOrEmpty(url)) {
             MessageBox.Show("Please enter a YouTube URL.");
@@ -178,17 +389,17 @@ public class MainForm : Form {
             MessageBox.Show("Please select a download format.");
             return;
         }
-        string formatOption = selectedFormatObj.ToString() ?? "Best audio only (MP3)";
 
+        string formatOption = selectedFormatObj.ToString() ?? "Best quality video + audio (MP4)";
         string custom = customArgsBox.Text.Trim();
         string formatArgs = "";
 
         switch (formatOption) {
             case "Best quality video + audio (MP4)":
-                formatArgs = "-f \"bestvideo+bestaudio/best\" --merge-output-format mp4";
+                formatArgs = "-f \"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best\"";
                 break;
             case "Best video only (MP4)":
-                formatArgs = "-f \"bestvideo\" --merge-output-format mp4";
+                formatArgs = "-f \"bestvideo[ext=mp4]\"";
                 break;
             case "Best audio only (MP3)":
                 formatArgs = "-x --audio-format mp3";
@@ -197,19 +408,19 @@ public class MainForm : Form {
                 formatArgs = "-f \"bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best\"";
                 break;
             case "720p (MP4)":
-                formatArgs = "-f \"bestvideo[height<=720]+bestaudio/best[height<=720]\" --merge-output-format mp4";
+                formatArgs = "-f \"bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720]\"";
                 break;
             case "480p (MP4)":
-                formatArgs = "-f \"bestvideo[height<=480]+bestaudio/best[height<=480]\" --merge-output-format mp4";
+                formatArgs = "-f \"bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480]\"";
                 break;
             case "360p (MP4)":
-                formatArgs = "-f \"bestvideo[height<=360]+bestaudio/best[height<=360]\" --merge-output-format mp4";
+                formatArgs = "-f \"bestvideo[height<=360][ext=mp4]+bestaudio[ext=m4a]/best[height<=360]\"";
                 break;
             case "WEBM best":
                 formatArgs = "-f \"bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]/best\"";
                 break;
-            case "MKV best":
-                formatArgs = "-f \"bestvideo+bestaudio\" --merge-output-format mkv";
+            case "MKV best (true best quality)":
+                formatArgs = "-f \"bestvideo+bestaudio/best\" --merge-output-format mkv";
                 break;
             case "Audio only (M4A)":
                 formatArgs = "-x --audio-format m4a";
@@ -227,10 +438,21 @@ public class MainForm : Form {
 
         string outputTemplate = Path.Combine(downloadsFolder, "%(title)s.%(ext)s");
         string args = $"{formatArgs} -o \"{outputTemplate}\" {custom} \"{url}\"";
-        RunCommand(ytDlpPath, args);
+
+        statusLabel.Text = "Starting download...";
+        downloadProgressBar.Value = 0;
+        this.Cursor = Cursors.WaitCursor;
+        downloadYoutubeButton.Enabled = false;
+
+        await Task.Run(() => RunCommand(ytDlpPath, args, true));
+
+        downloadYoutubeButton.Enabled = true;
+        statusLabel.Text = "Ready";
+        downloadProgressBar.Value = 0;
+        this.Cursor = Cursors.Default;
     }
 
-    private void RunCommand(string file, string args) {
+    private void RunCommand(string file, string args, bool isYoutubeDownload) {
         try {
             var process = new Process();
             process.StartInfo.FileName = file;
@@ -240,29 +462,55 @@ public class MainForm : Form {
             process.StartInfo.RedirectStandardError = true;
             process.StartInfo.CreateNoWindow = true;
 
-            process.OutputDataReceived += (s, e) => {
-                if (e.Data != null)
-                    Console.WriteLine(e.Data);
-            };
-            process.ErrorDataReceived += (s, e) => {
-                if (e.Data != null)
-                    Console.WriteLine(e.Data);
-            };
+            process.OutputDataReceived += (sender, e) => UpdateProgress(e.Data, isYoutubeDownload);
+            process.ErrorDataReceived += (sender, e) => UpdateProgress(e.Data, isYoutubeDownload);
 
             process.Start();
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             process.WaitForExit();
 
-            MessageBox.Show("Operation finished successfully!\n\nFiles saved to your Downloads folder.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            this.Invoke(new System.Windows.Forms.MethodInvoker(() => {
+                if (process.ExitCode == 0) {
+                    MessageBox.Show("Operation finished successfully!\n\nFiles saved to your Downloads folder.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                } else {
+                    MessageBox.Show("Operation completed with warnings or errors.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }));
+        } catch (Exception ex) {
+            this.Invoke(new System.Windows.Forms.MethodInvoker(() => {
+                MessageBox.Show("Error: " + ex.Message, "Error");
+                statusLabel.Text = "Ready";
+                downloadProgressBar.Value = 0;
+                this.Cursor = Cursors.Default;
+            }));
         }
-        catch (Exception ex) {
-            MessageBox.Show("Error: " + ex.Message, "Error");
+    }
+
+    private void UpdateProgress(string? line, bool isYoutubeDownload) {
+        if (!isYoutubeDownload || line == null) return;
+        if (line.Contains("[download]") && line.Contains("%")) {
+            int percentIndex = line.IndexOf('%');
+            if (percentIndex > 0) {
+                string beforePercent = line.Substring(0, percentIndex + 1);
+                int lastSpace = beforePercent.LastIndexOf(' ');
+                if (lastSpace > 0) {
+                    string percentStr = beforePercent.Substring(lastSpace + 1).Replace("%", "").Trim();
+                    if (double.TryParse(percentStr, out double percent)) {
+                        int progressValue = (int)Math.Round(percent);
+                        this.Invoke(new System.Windows.Forms.MethodInvoker(() => {
+                            downloadProgressBar.Value = Math.Min(progressValue, 100);
+                            statusLabel.Text = $"Downloading... {progressValue}%";
+                        }));
+                    }
+                }
+            }
         }
     }
 }
 
-class Config {
+class Config
+{
     public string? ffmpegPath { get; set; }
     public string? ytDlpPath { get; set; }
 }
